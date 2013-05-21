@@ -314,6 +314,8 @@
 
 #include "HardwareProfile.h"
 
+#include "Prog39VF010.h"
+
 /** V A R I A B L E S ********************************************************/
 #if defined(__18CXX)
     #pragma udata
@@ -864,23 +866,34 @@ void ProcessIO(void)
 		if(numBytesRead != 0)
 		{
 			BYTE i;
-	        
-			for(i=0;i<numBytesRead;i++)
+	 
+			if ((USB_Out_Buffer[0] | 0x20) == 'p')
 			{
-				switch(USB_Out_Buffer[i])
-				{
-					case 0x0A:
-					case 0x0D:
-						USB_In_Buffer[i] = USB_Out_Buffer[i];
-						break;
-					default:
-						USB_In_Buffer[i] = USB_Out_Buffer[i] + 1;
-						break;
-				}
-
+				int len;
+				strcpypgm2ram(USB_In_Buffer,"Starting Programmer Code\r\n");
+				len = strlen(USB_In_Buffer);
+				putUSBUSART( USB_In_Buffer, len);
+				main_programmer();
 			}
+			else
+			{
+				for(i=0;i<numBytesRead;i++)
+				{
+					switch(USB_Out_Buffer[i])
+					{
+						case 0x0A:
+						case 0x0D:
+							USB_In_Buffer[i] = USB_Out_Buffer[i];
+							break;
+						default:
+							USB_In_Buffer[i] = USB_Out_Buffer[i] + 1;
+							break;
+					}
 
-			putUSBUSART(USB_In_Buffer,numBytesRead);
+				}
+	
+				putUSBUSART(USB_In_Buffer,numBytesRead);
+			}
 		}
 	}
 
