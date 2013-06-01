@@ -61,7 +61,7 @@ char ReadByte(char _bank);
 * SST39VF010 specific code			*
 * based on SST documentation		*
 ************************************/
-int Check_SST_39VF010(char bank);
+unsigned short Check_SST_39VF010(char chip);
 void Erase_Entire_Chip(char bank);
 void Program_One_Byte (char bank, char a16, int Address, char value);
 void Program_two_Bytes (char a16, int Address, char value0, char value1);
@@ -87,6 +87,7 @@ void msg(char *text);
 void erase_chips();
 void send_version(void);
 void read_chip(void);	//reads entire chip and sends to serial
+void read_chip_hex(void);	//reads entire chip and sends to serial
 void write_chip(void);//writes serial data to chip
 void debug_mode(void);
 char GetByte( char *Buf );

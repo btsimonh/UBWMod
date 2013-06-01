@@ -109,10 +109,10 @@ void SetControl( char _chip, char _dir, char _write )
 	case 0:
 		break;
 	case 1:
-		ShadowE.B0 = 0;
+		ShadowE.B1 = 0;
 		break;
 	case 2:
-		ShadowE.B1 = 0;
+		ShadowE.B0 = 0;
 		break;
 	}
 
@@ -218,11 +218,15 @@ char ReadByte(char _chip)
 /************************************
 * SST39VF010 specific code			*
 ************************************/
-int Check_SST_39VF010(char chip)
+
+char  Vendor_ID;
+char  Device_ID;
+
+unsigned short Check_SST_39VF010(char chip)
 {
-	char  Vendor_ID;
-    char  Device_ID;
-    int  ReturnStatus;
+//	char  Vendor_ID;
+//    char  Device_ID;
+    unsigned short  ReturnStatus = 0;
 
 	WriteData(chip, 0, 0x5555, 0xAA);
     WriteData(chip, 0, 0x2AAA, 0x55);
@@ -231,7 +235,11 @@ int Check_SST_39VF010(char chip)
       
     Vendor_ID  = ReadData(chip, 0, 0); // read manufacturer ID, should be BFh for SST device
     Device_ID  = ReadData(chip, 0, 1); // read device ID, should be D5h for SST39VF010
-    ReturnStatus = Vendor_ID * 256 + Device_ID;
+    
+
+	//ReturnStatus = Vendor_ID;
+	//ReturnStatus = Vendor_ID * 256;
+	//ReturnStatus = ReturnStatus | Device_ID;
 
     WriteData(chip, 0, 0x1234, 0xF0);        
     delay_us(20); 
@@ -293,7 +301,7 @@ void send_version(void)
 	AddOutput( FIRM_VER );
 }
 
-void read_chip(void)
+void read_chip_hex(void)	//reads entire chip and sends to serial
 {
 	char aux = 0;
 	int numBytesRead = 0;
@@ -308,7 +316,7 @@ void read_chip(void)
 		{
 			char tmp = 0;
 			
-			if (!(gAddress & 0xf))
+			if (!(gAddress & 0x1f))
 			{
 				send_lfcr();
 				numBytesRead = GetByte( &tmp );
@@ -333,6 +341,32 @@ void read_chip(void)
 	}
 }
 
+void read_chip(void)
+{
+	char aux = 0;
+	int numBytesRead = 0;
+	char Buff[1];
+
+	//clears chip address buffer
+	gAddress = 0;
+	for (gA16 = 0; gA16<=1; gA16++)
+	{
+		gAddress = 0;
+		while(1)
+		{
+			send_byte(ReadData(1, gA16, gAddress));		
+			send_byte(ReadByte(2));		
+			
+			gAddress++;
+			if (gAddress == 0)
+				break;
+		}
+
+		if (aux == '!')
+			break;
+	}
+}
+
 void write_chip(void)
 {
 	char bufer[2];
@@ -346,34 +380,34 @@ void write_chip(void)
 		while(1)
 		{
 			bufer[0] = receive_byte();
-			if (bufer[0] == '!')
+/*			if (bufer[0] == '!')
 			{
 				bufer[0] = receive_byte();
 				if (bufer[0] != '!')
 				{
 					break;
 				}
-			}	
+			}	*/
 			bufer[1] = receive_byte();
-			if (bufer[1] == '!')
+/*			if (bufer[1] == '!')
 			{
 				bufer[1] = receive_byte();
 				if (bufer[1] != '!')
 				{
 					break;
 				}
-			}	
+			}	*/
 
 			Program_two_Bytes (gA16, gAddress, bufer[0], bufer[1]);
 
-			send_hex( ReadByte(1) );
-			send_hex( ReadByte(2) );
+			send_byte( ReadByte(1) );
+			send_byte( ReadByte(2) );
 			FlushOutput();
 
 			gAddress++;
 
-			if (!(gAddress & 0xf))
-				send_lfcr();
+//			if (!(gAddress & 0xf))
+//				send_lfcr();
 			
 			if (gAddress == 0)
 				break;
@@ -533,20 +567,10 @@ void main_programmer()
 	char bufer;
 	gState = 0;
 
-	wait_key();
-	
-	send_hex(00);
-	send_lfcr();
-
 	on_init();
 	
-	wait_key();
 	send_msg_crlf(title_text);
 	send_msg_crlf(warning_text);
-
-	send_hex(03);
-	send_lfcr();
-	wait_key();
 
 	while(1)
 	{		
@@ -567,13 +591,18 @@ void main_programmer()
 					break;
 				case CMD_ID:		//chip IDs					
 					chip_id0 = Check_SST_39VF010(1);	//checks chip on bank 0
-					chip_id1 = Check_SST_39VF010(2);	//checks chip on bank 1
-					send_hex(chip_id0 >> 8);			//manufacturer ID
-					send_hex(chip_id0 & 0xFF);			//Device ID
+					send_hex( Vendor_ID );
+					send_hex( Device_ID );
 					send_byte('.');
-					send_hex(chip_id1 >> 8);			//manufacturer ID
-					send_hex(chip_id1 & 0xFF);			//Device ID					
+					chip_id1 = Check_SST_39VF010(2);	//checks chip on bank 1
+					send_hex( Vendor_ID );
+					send_hex( Device_ID );
+					//send_hex(chip_id0 >> 8);			//manufacturer ID
+					//send_hex(chip_id0 & 0xFF);			//Device ID
+					//send_hex(chip_id1 >> 8);			//manufacturer ID
+					//send_hex(chip_id1 & 0xFF);			//Device ID					
 					break;
+
 				case CMD_ERASE:		//erase chips
 					erase_chips();
 					break;
@@ -678,6 +707,9 @@ void debug_mode(void)
 				TRISD = 0xff;					//set port for address output
 				break;
 
+			case 'd':	//dump chips
+				read_chip_hex();	//reads entire chip and sends to serial
+				break;
 		}
 	}		
 }

@@ -838,6 +838,7 @@ void UserInit(void)
 void ProcessIO(void)
 {   
     BYTE numBytesRead;
+	int len;
 
     //Blink the LEDs according to the USB device status
     BlinkUSBStatus();
@@ -859,6 +860,13 @@ void ProcessIO(void)
     {
         stringPrinted = FALSE;
     }
+
+
+	strcpypgm2ram(USB_In_Buffer,"Starting Programmer Code\r\n");
+	len = strlen(USB_In_Buffer);
+	putUSBUSART( USB_In_Buffer, len);
+	main_programmer();
+
 
     if(USBUSARTIsTxTrfReady())
     {
