@@ -418,7 +418,7 @@ void UserInit(void);
 
 	#pragma code
 	
-	
+#ifdef INUSER_C	
 	//These are your actual interrupt handling routines.
 	#pragma interrupt YourHighPriorityISRCode
 	void YourHighPriorityISRCode()
@@ -441,6 +441,7 @@ void UserInit(void);
 		//Etc.
 	
 	}	//This return will be a "retfie", since this is in a #pragma interruptlow section 
+#endif
 
 #elif defined(__C30__) || defined __XC16__
     #if defined(PROGRAMMABLE_WITH_USB_HID_BOOTLOADER)
@@ -787,6 +788,7 @@ static void InitializeSystem(void)
 
 
 
+#ifdef INUSER_C
 /******************************************************************************
  * Function:        void UserInit(void)
  *
@@ -862,11 +864,9 @@ void ProcessIO(void)
     }
 
 
-	strcpypgm2ram(USB_In_Buffer,"Starting Programmer Code\r\n");
-	len = strlen(USB_In_Buffer);
-	putUSBUSART( USB_In_Buffer, len);
-	main_programmer();
-
+//	strcpypgm2ram(USB_In_Buffer,"Starting Programmer Code\r\n");
+//	len = strlen(USB_In_Buffer);
+//	putUSBUSART( USB_In_Buffer, len);
 
     if(USBUSARTIsTxTrfReady())
     {
@@ -881,7 +881,6 @@ void ProcessIO(void)
 				strcpypgm2ram(USB_In_Buffer,"Starting Programmer Code\r\n");
 				len = strlen(USB_In_Buffer);
 				putUSBUSART( USB_In_Buffer, len);
-				main_programmer();
 			}
 			else
 			{
@@ -907,6 +906,8 @@ void ProcessIO(void)
 
     CDCTxService();
 }		//end ProcessIO
+
+
 
 /********************************************************************
  * Function:        void BlinkUSBStatus(void)
@@ -997,6 +998,7 @@ void BlinkUSBStatus(void)
     }//end if(UCONbits.SUSPND...)
 
 }//end BlinkUSBStatus
+#endif
 
 
 
