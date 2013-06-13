@@ -8,7 +8,7 @@ dir_src=
 dir_bin=
 dir_tmp=.\Objects\PIC18F47J53 PIM
 dir_sin=
-dir_inc=C:\Program Files\Microchip\mplabc18\v3.38\h;.;C:\microchip_solutions_v2013-02-15\Microchip\include
+dir_inc=C:\MCC18\h;.;C:\microchip_solutions_v2013-02-15\Microchip\include
 dir_lib=C:\MCC18\lib
 dir_lkr=
 [CAT_FILTERS]
