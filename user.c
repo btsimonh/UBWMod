@@ -264,6 +264,8 @@ void parse_F_packet  (void);	// F  Frequency out
 void parse_HS_packet (void);	// HS hbridge setup
 void parse_HB_packet (void);	// HB hbridge value set
 void parse_W_packet (void);		// Set PWM
+void parse_IR_packet(void);		// send IR
+void parse_IX_packet(void);     // send IR from hex
 void ActionHB(void);
 
 void check_and_send_TX_data (void); // See if there is any data to send to PC, and if so, do it
@@ -281,11 +283,16 @@ typedef struct tag_IRSTRUCT
 
 	unsigned char Type;
 	unsigned char T;
-
-	unsigned short RunningCount;
-	unsigned short LastRunningCount;
-
 } IRSTRUCT;
+
+
+
+
+#define MAXIRBITS (48*2+4)
+unsigned char IRSendCount;
+unsigned char IRSend[MAXIRBITS];
+unsigned char IRSentCount;
+unsigned char IRDest;
 
 
 #define NONE 0
@@ -1040,10 +1047,10 @@ void ProcessIO(void)
 		if (IR[i].IRReady)
 		{
 			int j;
-			printf( "IR%d,T=%d,Type=%d:", i, IR[i].T, IR[i].Type );
-			for (j = 1; j < IR[i].IRBit; j++)
+			printf( "IR%d,T=%d,Type=%d,bits=%d:", i, IR[i].T, IR[i].Type, IR[i].IRBit );
+			for (j = 1; j < IR[i].IRBit+1; j++)
 				{
-				printf( "%x", (IR[i].IRBits[(j-1)/8] >> ((j-1) & 7)) & 1 );
+				printf( "%x", (IR[i].IRBits[(j-1)/8] >> (7 - ((j-1) & 7))) & 1 );
 				}
 
 			printf( " " );
@@ -1356,7 +1363,20 @@ void parse_packet(void)
 			parse_HB_packet ();
 			break;
 		}
+		case ('I' * 256) + 'R':
+		{
+			// set send of IR
+			parse_IR_packet ();
+			break;
+		}
+		case ('I' * 256) + 'X':
+		{
+			// set send of IR
+			parse_IX_packet ();
+			break;
+		}
 		
+
 		default:
 		{
 			if (0 == cmd2)
@@ -1450,6 +1470,7 @@ void parse_CU_packet(void)
 	}
 	print_ack();
 }
+
 
 // "T" Packet
 // Causes PIC to sample digital or analog inputs at a regular interval and send
@@ -3229,45 +3250,23 @@ void ProcessIR( IRSTRUCT *IR, unsigned char val )
 {
 	unsigned char Bit = IR->IRBit;
 
+
 	if ((IR->Type == RC5) && (IR->IRBit))
 	{
 		ProcessRC5( IR, val );
 		return;
 	}
 
-
-
 	if (IR->IRVal == val)
 	{
 		if (IR->IRCount < 100)
 		{
-			IR->RunningCount++;
 			IR->IRCount++;	
 		}
 		else
 		{
 			if (IR->IRBit)
 				IR->IRReady = 1;
-		}
-
-		// if RC5
-		if (IR->Type == RC5)
-		{
-			// if started
-			if (Bit)
-			{
-				Bit--;
-				// if we pass the middle of a pulse
-				if (IR->LastRunningCount < IR->RunningCount)
-				{
-					if ((IR->RunningCount - IR->LastRunningCount) > IR->T+2)
-					{
-						// then it was a zero
-						IR->IRBit++;
-						IR->LastRunningCount = IR->LastRunningCount + IR->T+2;
-					}
-				}
-			}
 		}
 
 	}
@@ -3282,7 +3281,6 @@ void ProcessIR( IRSTRUCT *IR, unsigned char val )
 				// if on first bit,
 				if (Bit == 0)
 				{
-					IR->RunningCount = 0;
 					switch ( IR->Type )
 					{
 					default:
@@ -3332,7 +3330,6 @@ void ProcessIR( IRSTRUCT *IR, unsigned char val )
 			// 9ms -> RC5 
 			if (Bit == 0)
 			{
-				IR->RunningCount = 0;
 				if ((IR->IRCount > 40) && (IR->IRCount < 50))
 				{
 					IR->Type = RC5;
@@ -3356,6 +3353,52 @@ void ProcessIR( IRSTRUCT *IR, unsigned char val )
 
 
 
+void SendIR()
+{
+	unsigned char Bit = 0b00000010;
+	switch (IRDest)
+	{
+	case '1':
+		Bit = 0b00000010;
+		break;
+	case '2':
+		Bit = 0b00000100;
+		break;
+	case '3':
+	default:
+		Bit = 0b00001000;
+		break;
+	}
+
+	if (IRSend[IRSentCount])
+	{
+		if (IRSentCount & 1)
+			LATA |= Bit;
+		else
+			LATA &= ~Bit;
+			
+		IRSend[IRSentCount]--;
+		if (0 == IRSend[IRSentCount])
+		{
+			IRSentCount++;
+			if (IRSentCount == IRSendCount)
+			{
+				IRSendCount = 0;
+				IRSentCount = 0;
+				LATA |= Bit;
+			}
+		}
+	}
+	else
+	{
+		IRSendCount = 0;
+		IRSentCount = 0;
+		LATA |= Bit;
+	}
+}
+
+
+
 void ActionHB()
 {
 	char i;
@@ -3367,6 +3410,12 @@ void ActionHB()
 	ProcessIR( &IR[0], PORTBbits.RB6 );
 	ProcessIR( &IR[1], PORTBbits.RB7 );
 	ProcessIR( &IR[2], PORTAbits.RA0 );
+
+	if (IRSendCount)
+	{
+		SendIR();
+	}
+
 
 	// only run pwm on every 10th loop
 	if (HBCount >= 10)
@@ -3566,6 +3615,263 @@ void parse_HB_packet(void)
 	// Now send back our response
 	printf((far rom char *)"TRISA %x LATA %x\r\n", TRISA, LATA );
 	printf ((far rom char *)"%d\r\n", HBCycles);
+	print_ack ();
+}
+
+
+
+void parse_IR_packet(void)
+{
+	int i;
+
+	// Check for comma where ptr points
+	if (g_RX_buf[g_RX_buf_out] != ',')
+	{
+		printf ((far rom char *)"!5 Err: Need comma next, found: '%c'\r\n", g_RX_buf[g_RX_buf_out]);
+		bitset (error_byte, kERROR_BYTE_PRINTED_ERROR);
+		return;
+	}
+
+	// Move to the next character
+	advance_RX_buf_out ();
+
+	IRDest = g_RX_buf[g_RX_buf_out];
+	
+	// Move to the next character
+	advance_RX_buf_out ();
+
+
+	memset( IRSend, 0, sizeof(IRSend) );
+	printf((far rom char *)"IR" );
+	for (i = 0; i < MAXIRBITS; i++)
+	{
+		if (kEXTRACT_OK == extract_number (kCHAR, &IRSend[i], kOPTIONAL))
+		{
+			printf((far rom char *)",%d", IRSend[i] );
+		}
+		else
+		{
+			break;
+		}	
+	}
+
+	IRSentCount = 0;
+	IRSendCount = i;
+	printf((far rom char *)" - count = %d\r\n", IRSendCount );
+	print_ack ();
+
+}
+
+
+
+void parse_IX_packet(void)
+{
+	unsigned char BO_data_byte;
+	unsigned char tmp;
+	unsigned char cnt = 0;
+	unsigned char i = 0;
+	unsigned char IRType = '1';
+
+	// Check for comma where ptr points
+	if (g_RX_buf[g_RX_buf_out] != ',')
+	{
+		printf ((far rom char *)"!5 Err: Need comma next, found: '%c'\r\n", g_RX_buf[g_RX_buf_out]);
+		bitset (error_byte, kERROR_BYTE_PRINTED_ERROR);
+		return;
+	}
+
+	// Move to the next character
+	advance_RX_buf_out ();
+
+	IRDest = g_RX_buf[g_RX_buf_out];
+	
+	// Move to the next character
+	advance_RX_buf_out ();
+
+	// Check for comma where ptr points
+	if (g_RX_buf[g_RX_buf_out] != ',')
+	{
+		printf ((far rom char *)"!5 Err: Need comma next, found: '%c'\r\n", g_RX_buf[g_RX_buf_out]);
+		bitset (error_byte, kERROR_BYTE_PRINTED_ERROR);
+		return;
+	}
+
+	// Move to the next character
+	advance_RX_buf_out ();
+
+	IRType = g_RX_buf[g_RX_buf_out];
+	
+	// Move to the next character
+	advance_RX_buf_out ();
+
+	// Check for comma where ptr points
+	if (g_RX_buf[g_RX_buf_out] != ',')
+	{
+		printf ((far rom char *)"!5 Err: Need comma next, found: '%c'\r\n", g_RX_buf[g_RX_buf_out]);
+		bitset (error_byte, kERROR_BYTE_PRINTED_ERROR);
+		return;
+	}
+
+	// Move to the next character
+	advance_RX_buf_out ();
+
+	IRSentCount = 0;
+
+	// header
+
+	switch (IRType)
+	{
+	case '1': // roborover
+		break;
+
+	default:
+	case '2': // LG TV
+		IRSend[cnt++] = 45;
+		IRSend[cnt++] = 20;
+		break;
+
+	case '3': // Humax
+		IRSend[cnt++] = 45;
+		IRSend[cnt++] = 10;
+		break;
+
+	case '4': //panasonic
+		IRSend[cnt++] = 17;
+		IRSend[cnt++] = 8;
+		break;
+	}
+
+	while (g_RX_buf[g_RX_buf_out] != 13)
+	{
+		// Pull in a nibble from the input buffer
+		tmp = toupper (g_RX_buf[g_RX_buf_out]);
+		if (tmp >= '0' && tmp <= '9')
+		{
+			tmp -= '0';	
+		}
+		else if (tmp >= 'A' && tmp <= 'F')
+		{
+			tmp -= 55;
+		}
+		else 
+		{
+			bitset (error_byte, kERROR_BYTE_PARAMETER_OUTSIDE_LIMIT);
+			return;
+		}
+		BO_data_byte = tmp << 4;
+		advance_RX_buf_out ();
+
+		// Check for CR next
+		if (kCR == g_RX_buf[g_RX_buf_out])
+		{
+			bitset (error_byte, kERROR_BYTE_MISSING_PARAMETER);
+			return;
+		}
+
+		tmp =  toupper (g_RX_buf[g_RX_buf_out]);
+		if (tmp >= '0' && tmp <= '9')
+		{
+			tmp -= '0';	
+		}
+		else if (tmp >= 'A' && tmp <= 'F')
+		{
+			tmp -= 55;
+		}
+		else
+		{
+			bitset (error_byte, kERROR_BYTE_PARAMETER_OUTSIDE_LIMIT);
+			return;
+		}
+		BO_data_byte = BO_data_byte + tmp;
+		advance_RX_buf_out ();
+	
+
+		switch (IRType)
+		{
+		case '1': // roborover
+			for (i = 0; i < 8; i++)
+			{
+				if (cnt < MAXIRBITS-1)
+				{
+					if ((BO_data_byte >> (7 - i)) & 1)
+					{
+						IRSend[cnt++] = 5;
+						IRSend[cnt++] = 16;
+					}	
+					else
+					{
+						IRSend[cnt++] = 5;
+						IRSend[cnt++] = 4;
+					}
+				}
+			}
+			break;
+
+		default:
+		case '2': // LG TV
+		case '3': // Humax
+			for (i = 0; i < 8; i++)
+			{
+				if (cnt < MAXIRBITS-1)
+				{
+					if ((BO_data_byte >> (7 - i)) & 1)
+					{
+						IRSend[cnt++] = 3;
+						IRSend[cnt++] = 8;
+					}	
+					else
+					{
+						IRSend[cnt++] = 3;
+						IRSend[cnt++] = 3;
+					}
+				}
+			}
+			break;
+
+		case '4': // Panasonic
+			for (i = 0; i < 8; i++)
+			{
+				if (cnt < MAXIRBITS-1)
+				{
+					if ((BO_data_byte >> (7 - i)) & 1)
+					{
+						IRSend[cnt++] = 2;
+						IRSend[cnt++] = 6;
+					}	
+					else
+					{
+						IRSend[cnt++] = 2;
+						IRSend[cnt++] = 2;
+					}
+				}
+			}
+			break;
+
+		}		
+	}
+
+	switch (IRType)
+	{
+	case '1': // roborover
+		// end bit
+		IRSend[cnt++] = 5;
+		// overwrite with header
+		IRSend[0] = 32;
+		IRSend[1] = 4;
+		break;
+	default:
+	case '2': // lg TV
+	case '3': // humax
+		// end bit
+		IRSend[cnt++] = 3;
+		break;
+	case '4': // panasonic
+		// end bit
+		IRSend[cnt++] = 2;
+		break;
+	}	
+
+	IRSendCount = cnt;
 	print_ack ();
 }
 

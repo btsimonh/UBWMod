@@ -1,0 +1,229 @@
+F,300,A,1,05
+F,300,A,1,10
+F,300,A,1,20
+F,300,A,1,40
+F,300,A,1,60
+F,300,A,1,80
+F,300,A,1,99
+F,300,A,1,99
+F,300,A,1,99
+F,300,A,1,99
+F,300,A,1,99
+F,300,A,1,0
+
+HB,0,0
+
+HB,2,2
+
+HB,4,4
+
+HB,9,9
+
+HB,-9,-9
+HB,-1,-1
+
+
+C,255,255,255,13
+T,500,0
+T,500,1
+
+T,0,0
+T,0,1
+
+PD,A,0,1
+
+// IR inputs
+PD,B,6,1
+PD,B,7,1
+PD,A,0,1
+
+// IR outputs
+PD,A,1,0
+PD,A,2,0
+PD,A,3,0
+
+// IR rx power
+PD,B,1,0
+PO,B,1,1
+
+// 38Khz clock from ECCP1 on RB0
+W,50
+
+
+HS,D,2,D,3,D,0,D,1
+HB,0,0
+HB,-5,5
+HB,0,0
+HB,2,2
+HB,3,-3
+
+
+
+
+
+
+
+
+PO,B,1,0
+
+
+PD,B,6,1
+PD,B,7,1
+PD,A,0,1
+PD,A,1,0
+PD,A,2,0
+PD,A,3,0
+PD,B,1,0
+PO,B,1,1
+W,160,63400
+HS,D,2,D,3,D,0,D,1
+HB,0,0
+T,0,0
+;LEDs off
+PO,A,1,1
+PO,A,2,1
+PO,A,3,1
+
+LEDs on
+PO,A,1,0
+PO,A,2,0
+PO,A,3,0
+
+LEDs off
+PO,A,1,1
+PO,A,2,1
+PO,A,3,1
+
+T,0,0
+
+
+Send IR:
+
+IR,2,32,4,5,4,5,16,5,4,5,16,5,16,5,4,5,4,5,4,5,4,5,4,5,4,5,4,5,4,5,4,5,4,5,4,5,4,5,4,5,4,5,16,5,4,5,4,5,16,5,4
+
+IR,127,4,127,4,127,4,127,4,127,4,127,4,127,4,127,4,127,4,127,4,127,4,127,4,127,4,127,4,127,4,127,4,127,4,127,4
+
+IX,888888
+IX,AAAAAA
+IX,1111
+IX,2222
+IX,1,FFFFFF
+IX,2,FFFFFF
+IX,3,FFFFFF
+
+IX,3,FFFF
+
+
+IX,8011b0
+
+
+
+1 0111 1111 1111 1111 bfff
+
+IR2,T=4,Type=2,bits=15:1111 1111 1111 111 fffe
+I
+
+IR2,T=4,Type=2,bits=24:1000 0000 0001 0001 1011 000 8011b0
+
+General IR:
+sampled at 0.2ms
+
+
+
+roborover IR remote produces something like:RECS80SLOW
+=============
+"The RECS 80
+code uses pulse length modulation. Each bit to be transmitted is encoded
+by a high level of the duration T followed by a low level of duration 2T
+representing a logical '0' or 3T representing a logical '1'."
+24 bits are variable time.
+
+signal is active low.
+start low is ~6.5ms followed by a 'high'
+then for each bit:
+low of ~0.92ms long = 4-5 samples
+'0' = 'high' pulse of 0.75-0.8 ms long.  = 4 samples
+'1' = 'high' pulse of ~3.2ms long = 16 samples
+
+6.5ms = 32 samples
+
+IX,3,1,FFFF
+
+
+
+LG remote:
+=============
+9ms low = 45 samples
+4ms high = 22 samples
+lows = 0.6ms = 3 samples
+high = 0.44ms or 1.5ms = 2 or 7 samples
+command always the same length
+"The RC 5 code instead has a uniform duration of all bits. A transition in the middle of the time interval assigned to each bit encodes the logical value. A '0' is encoded by a high to low transition and a '1' by a low to high transition. 
+Therefore we need additional transitions at the beginning of each bit to set the proper start level if a series of equal bits is sent. We don't need this additional transition if the next bit has a different value. This is also called a 
+'biphase' code."
+
+IR,3,45,20,3,8,3,8,3,8,3,8,3,3,3,3,3,3,3,3,3
+
+power
+IR,2,45,20,3,3,3,3,3,8,3,3,3,3,3,3,3,3,3,3,3,8,3,8,3,3,3,8,3,8,3,8,3,8,3,8,3,3,3,3,3,3,3,8,3,3,3,3,3,3,3,3,3,8,3,8,3,8,3,3,3,8,3,8,3,8,3,8,3
+
+power:
+IX,2,2,20df10ef
+
+
+Humax remote:
+=============
+9ms low = 45samples
+2ms high
+lows = 0.6ms
+high = 0.44ms or 1.5ms
+command always the same length (just shorter than LG)
+
+
+
+
+Panasonic remote: RECS80FAST
+=============================
+command are different lengths
+3.4ms low, = 17 samples
+1.6ms high, = 8 samples
+0.5ms low = 2 samples
+0.6ms high = 2-3 samples
+or 1.2ms high. = 6 samples
+
+power:
+IX,2,4,40040d00bcb1
+
+
+
+use IX,1 for low power headlamp.
+use IX,2 for full power headlamp.
+use IX,3 for chest(directional) IR.
+
+
+
+
+
+dim headlamp ir
+PO,A,1,0
+PO,A,2,1
+PO,A,3,1
+
+bright headlamp ir
+PO,A,1,1
+PO,A,2,0
+PO,A,3,1
+
+chest ir tx
+PO,A,1,1
+PO,A,2,1
+PO,A,3,0
+
+
+
+
+
+
+W,160,63400
+=0.2ms
+
