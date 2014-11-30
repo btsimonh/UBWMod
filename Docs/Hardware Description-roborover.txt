@@ -1,0 +1,48 @@
+Ports:
+
+RA0 - Analogue battery input. 36000 ~= 7.53v
+
+IR Tx pins
+RA1 - IR 1 - high power 
+RA2 - IR 2 - back
+RA3 - IR 3 - low power
+
+RB1 -> IR power
+RB2 -> IR modulation? (rate set by W)
+
+
+IR inputs
+RB5 -> IR[0]
+RB6 -> IR[1] 
+RB7 -> IR[2]
+
+Motor control:
+RD0 -
+RD1 -
+RD2 -
+RD3 -
+
+
+New UBW commands:
+HS - setup hbridge output
+format:
+HS,<port>,<pin>,<port>,<pin>,<port>,<pin>,<port>,<pin>
+
+e.g.
+HS,D,2,D,3,D,0,D,1
+
+The Hbridge allows alues for 4 PWM signals to be set simultaneously
+
+HB - HBridge value
+Sets values to the hbridge outputs
+format:
+HB,<number -10 to 10>,<number -10 to 10>
+
+e.g.
+HB,0,0 to stop both motors
+HB,5,5 to set both motors to forward half
+HB,5,-5 to set one motors to forward and one motor to bwd
+
+
+
+
