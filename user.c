@@ -299,6 +299,7 @@ unsigned char IRDest;
 #define RC5 1
 #define RECS80SLOW 2
 #define RECS80FAST 3
+#define ICYBIE 4
 
 
 IRSTRUCT IR[3];
@@ -649,7 +650,8 @@ void UserInit(void)
 //#ifdef __18F4550
 	// Make all of PORTD and PORTE inputs too
 	LATD = 0x00;
-	TRISD = 0xFF;
+	// port D as output, set to zero so it does not start right away
+	TRISD = 0x00;
 	LATE = 0x00;
 	TRISE = 0xFF;
 //#endif
@@ -3249,6 +3251,7 @@ void ProcessRC5( IRSTRUCT *IR, unsigned char val )
 void ProcessIR( IRSTRUCT *IR, unsigned char val )
 {
 	unsigned char Bit = IR->IRBit;
+	unsigned char Max = 100;
 
 
 	if ((IR->Type == RC5) && (IR->IRBit))
@@ -3257,9 +3260,23 @@ void ProcessIR( IRSTRUCT *IR, unsigned char val )
 		return;
 	}
 
+
+	switch ( IR->Type )
+	{
+	default:
+	case RC5:
+	case RECS80SLOW:
+	case RECS80FAST:
+		break;
+	case ICYBIE:
+		Max = 40;
+		break;
+	}
+
+
 	if (IR->IRVal == val)
 	{
-		if (IR->IRCount < 100)
+		if (IR->IRCount < Max)
 		{
 			IR->IRCount++;	
 		}
@@ -3276,7 +3293,7 @@ void ProcessIR( IRSTRUCT *IR, unsigned char val )
 		
 		if (val == 0)
 		{
-			if (IR->IRCount < 100)
+			if (IR->IRCount < Max)
 			{
 				// if on first bit,
 				if (Bit == 0)
@@ -3293,6 +3310,9 @@ void ProcessIR( IRSTRUCT *IR, unsigned char val )
 						break;
 					case RECS80FAST:
 						IR->T = IR->IRCount /3;
+						break;
+					case ICYBIE:
+						IR->T = 10;
 						break;
 					}
 
@@ -3317,6 +3337,9 @@ void ProcessIR( IRSTRUCT *IR, unsigned char val )
 							{
 								IR->IRBits[Bit/8] |= (1 << (7 - (Bit & 7)));
 							}	
+							break;
+
+						case ICYBIE:
 							break;
 						}
 						IR->IRBit++;
@@ -3344,7 +3367,33 @@ void ProcessIR( IRSTRUCT *IR, unsigned char val )
 				{
 					IR->Type = RECS80FAST;
 				}
+
+				if ((IR->IRCount > 4) && (IR->IRCount < 10))
+				{
+					IR->Type = ICYBIE;
+				}
+
 			}
+			else
+			{
+				// transition to 'zero' (signal goes to '1')
+				switch ( IR->Type )
+				{
+				default:
+				case RC5:
+				case RECS80SLOW:
+				case RECS80FAST:
+					break;
+
+				// for i-cybie, we measure the 'on' pulse
+				case ICYBIE:
+					if (IR->IRCount > IR->T)
+					{
+						IR->IRBits[Bit/8] |= (1 << (7 - (Bit & 7)));
+					}	
+					break;
+				}
+			}	
 		}
 
 		IR->IRCount = 0;
@@ -3423,6 +3472,11 @@ void ActionHB()
 		HBCount = 0;
 		HBCycles ++;
 
+		if (HBCycles >= 10)
+		{
+			HBCycles = 0;
+		}
+
 		for (i = 0; i < ActivePorts; i++)
 		{
 			if (valdir[i])
@@ -3462,7 +3516,7 @@ void ActionHB()
 				}
 			}
 			
-			if (valduty[i] > HBCount)
+			if (valduty[i] > HBCycles)
 			{
 				switch (portduty[i])
 				{
@@ -3499,6 +3553,7 @@ void ActionHB()
 				}
 			}
 		}
+
 	}
 }
 
@@ -3739,6 +3794,10 @@ void parse_IX_packet(void)
 		IRSend[cnt++] = 17;
 		IRSend[cnt++] = 8;
 		break;
+
+	case '5': //i-cybie
+		// no start bit
+		break;
 	}
 
 	while (g_RX_buf[g_RX_buf_out] != 13)
@@ -3847,6 +3906,26 @@ void parse_IX_packet(void)
 			}
 			break;
 
+		case '5': // i-cybie
+			for (i = 0; i < 8; i++)
+			{
+				if (cnt < MAXIRBITS-1)
+				{
+					if ((BO_data_byte >> (7 - i)) & 1)
+					{
+						IRSend[cnt++] = 17;
+						IRSend[cnt++] = 6;
+					}	
+					else
+					{
+						IRSend[cnt++] = 6;
+						IRSend[cnt++] = 17;
+					}
+				}
+			}
+			break;
+
+
 		}		
 	}
 
@@ -3868,6 +3947,9 @@ void parse_IX_packet(void)
 	case '4': // panasonic
 		// end bit
 		IRSend[cnt++] = 2;
+		break;
+	case '5': // icybie
+		// no trail bit
 		break;
 	}	
 
